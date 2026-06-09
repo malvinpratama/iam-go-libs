@@ -7,15 +7,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPool dials Postgres, retrying for up to ~30s while the DB comes up.
+// NewPool dials Postgres, retrying for up to ~30s while the DB comes up. Queries
+// are traced via OpenTelemetry (a no-op until a tracer provider is installed).
 func NewPool(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, fmt.Errorf("parse pool config: %w", err)
 	}
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	var pool *pgxpool.Pool
 	for attempt := 1; attempt <= 15; attempt++ {
 		pool, err = pgxpool.NewWithConfig(ctx, cfg)

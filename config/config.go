@@ -29,6 +29,13 @@ func InternalToken() string { return os.Getenv("INTERNAL_SERVICE_TOKEN") }
 // profile healing remains as a fallback), keeping the broker optional.
 func NatsURL() string { return os.Getenv("NATS_URL") }
 
+// OTLPEndpoint is the OpenTelemetry collector endpoint (host:port, gRPC) for
+// trace export. Empty disables tracing, keeping observability optional.
+func OTLPEndpoint() string { return os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") }
+
+// MetricsAddr is the listen address for the Prometheus /metrics endpoint.
+func MetricsAddr() string { return ":" + Getenv("METRICS_PORT", "9100") }
+
 // ── v0.2 Security+ feature toggles (all default to non-breaking) ─────
 
 // RequireEmailVerification blocks login for unverified users when true.

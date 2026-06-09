@@ -16,7 +16,31 @@ const (
 	MDRoles         = "x-user-roles"       // comma-separated
 	MDPermissions   = "x-user-permissions" // comma-separated
 	MDInternalToken = "x-internal-token"   // gateway→service shared secret
+	MDRequestID     = "x-request-id"       // correlation id propagated end-to-end
 )
+
+// RequestIDFromIncoming returns the correlation id from an incoming server
+// context (empty if absent).
+func RequestIDFromIncoming(ctx context.Context) string {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		return first(md, MDRequestID)
+	}
+	return ""
+}
+
+// WithRequestID attaches a correlation id to an outgoing context, preserving any
+// identity metadata already set by Inject.
+func WithRequestID(ctx context.Context, id string) context.Context {
+	if id == "" {
+		return ctx
+	}
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		md = md.Copy()
+		md.Set(MDRequestID, id)
+		return metadata.NewOutgoingContext(ctx, md)
+	}
+	return metadata.AppendToOutgoingContext(ctx, MDRequestID, id)
+}
 
 // HasPermission reports whether the identity holds the given permission.
 func (id Identity) HasPermission(perm string) bool {
