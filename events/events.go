@@ -17,12 +17,14 @@ const (
 	SubjectPrefix         = "iam."
 	SubjectUserRegistered = "iam.user.registered"
 	SubjectUserDeleted    = "iam.user.deleted"
+	SubjectUserRestored   = "iam.user.restored"
 )
 
 // Event type tags as stored in the auth outbox (subject = SubjectPrefix + type).
 const (
 	TypeUserRegistered = "user.registered"
 	TypeUserDeleted    = "user.deleted"
+	TypeUserRestored   = "user.restored"
 )
 
 // UserRegistered is published after an identity is created. The user service
@@ -34,8 +36,15 @@ type UserRegistered struct {
 }
 
 // UserDeleted is published after an identity is deleted. The user service uses
-// it to drop the matching profile.
+// it to drop the matching profile — soft by default, permanently when Hard.
 type UserDeleted struct {
+	UserID string `json:"user_id"`
+	Hard   bool   `json:"hard,omitempty"`
+}
+
+// UserRestored is published after a soft-deleted identity is restored. The user
+// service uses it to un-delete the matching profile.
+type UserRestored struct {
 	UserID string `json:"user_id"`
 }
 
