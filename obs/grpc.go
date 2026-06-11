@@ -3,6 +3,7 @@ package obs
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	grpcprom "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -21,6 +22,11 @@ func loggingUnary(log *slog.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		start := time.Now()
 		resp, err := handler(ctx, req)
+		// Skip access logs for the gRPC health probes — k8s liveness/readiness
+		// hit them every few seconds and would otherwise flood the log.
+		if strings.HasPrefix(info.FullMethod, "/grpc.health.v1.Health/") {
+			return resp, err
+		}
 		traceID := ""
 		if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
 			traceID = sc.TraceID().String()
