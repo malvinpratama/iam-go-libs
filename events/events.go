@@ -18,6 +18,9 @@ const (
 	SubjectUserRegistered = "iam.user.registered"
 	SubjectUserDeleted    = "iam.user.deleted"
 	SubjectUserRestored   = "iam.user.restored"
+	// SubjectProfileFailed is the compensation signal: the user service gave up
+	// creating a profile, so auth should roll back (soft-delete) the identity.
+	SubjectProfileFailed = "iam.user.profile_failed"
 )
 
 // Event type tags as stored in the auth outbox (subject = SubjectPrefix + type).
@@ -25,6 +28,7 @@ const (
 	TypeUserRegistered = "user.registered"
 	TypeUserDeleted    = "user.deleted"
 	TypeUserRestored   = "user.restored"
+	TypeProfileFailed  = "user.profile_failed"
 )
 
 // UserRegistered is published after an identity is created. The user service
@@ -46,6 +50,14 @@ type UserDeleted struct {
 // service uses it to un-delete the matching profile.
 type UserRestored struct {
 	UserID string `json:"user_id"`
+}
+
+// ProfileCreationFailed is the saga compensation event: the user service could
+// not create the profile after exhausting retries. Auth consumes it and rolls
+// back (soft-deletes) the half-created identity so there are no orphans.
+type ProfileCreationFailed struct {
+	UserID string `json:"user_id"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // Connect opens a NATS connection (with infinite reconnect) and a JetStream
