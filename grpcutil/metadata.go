@@ -15,6 +15,8 @@ const (
 	MDEmail         = "x-user-email"
 	MDRoles         = "x-user-roles"       // comma-separated
 	MDPermissions   = "x-user-permissions" // comma-separated
+	MDTenantID      = "x-tenant-id"        // M6: active tenant the token is bound to
+	MDProjectID     = "x-project-id"       // M6: active project (empty = tenant-wide)
 	MDInternalToken = "x-internal-token"   // gateway→service shared secret
 	MDRequestID     = "x-request-id"       // correlation id propagated end-to-end
 )
@@ -58,6 +60,8 @@ type Identity struct {
 	Email       string
 	Roles       []string
 	Permissions []string
+	TenantID    string // M6: active tenant
+	ProjectID   string // M6: active project (empty = tenant-wide)
 }
 
 // Inject attaches the identity to an outgoing context.
@@ -67,6 +71,8 @@ func Inject(ctx context.Context, id Identity) context.Context {
 		MDEmail, id.Email,
 		MDRoles, strings.Join(id.Roles, ","),
 		MDPermissions, strings.Join(id.Permissions, ","),
+		MDTenantID, id.TenantID,
+		MDProjectID, id.ProjectID,
 	)
 	return metadata.NewOutgoingContext(ctx, md)
 }
@@ -78,8 +84,10 @@ func FromIncoming(ctx context.Context) Identity {
 		return Identity{}
 	}
 	id := Identity{
-		UserID: first(md, MDUserID),
-		Email:  first(md, MDEmail),
+		UserID:    first(md, MDUserID),
+		Email:     first(md, MDEmail),
+		TenantID:  first(md, MDTenantID),
+		ProjectID: first(md, MDProjectID),
 	}
 	if roles := first(md, MDRoles); roles != "" {
 		id.Roles = strings.Split(roles, ",")
