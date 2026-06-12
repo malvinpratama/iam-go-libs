@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -50,19 +51,47 @@ func LockoutDuration() time.Duration { return GetenvDuration("LOGIN_LOCKOUT_SECO
 // AuditEnabled controls whether sensitive actions are written to the audit log.
 func AuditEnabled() bool { return Getenv("AUDIT_ENABLED", "true") != "false" }
 
-// ValidateSecurity fails fast on insecure configuration in production.
+// weakSecretMarkers are substrings that betray a placeholder/demo/dev secret.
+// The committed demo values (k8s-demo-…-rotate-me, app_secret, dev-…-change-me,
+// ChangeMeAdmin-…) all contain one, so exact-matching the old defaults was not
+// enough — these markers reject every shipped placeholder.
+var weakSecretMarkers = []string{
+	"change-me", "changeme", "rotate-me", "k8s-demo", "demo-secret",
+	"dev-internal", "admin12345", "app_secret", "console-demo",
+}
+
+// looksWeak reports whether s contains a known placeholder marker.
+func looksWeak(s string) bool {
+	l := strings.ToLower(s)
+	for _, m := range weakSecretMarkers {
+		if strings.Contains(l, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateSecurity fails fast on insecure configuration in production. It rejects
+// not just the original defaults but any value carrying a placeholder marker, so
+// a repo-committed demo secret cannot boot a production deployment.
 func ValidateSecurity() error {
 	if !IsProduction() {
 		return nil
 	}
-	if s := Getenv("JWT_SECRET", DefaultJWTSecret); s == DefaultJWTSecret || len(s) < 32 {
-		return fmt.Errorf("JWT_SECRET must be set to a strong value (>=32 bytes) in production")
+	if s := Getenv("JWT_SECRET", DefaultJWTSecret); len(s) < 32 || looksWeak(s) {
+		return fmt.Errorf("JWT_SECRET must be a strong, non-placeholder value (>=32 bytes) in production")
 	}
-	if p := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"); p == "admin12345" {
-		return fmt.Errorf("BOOTSTRAP_ADMIN_PASSWORD must not be the default in production")
+	if p := os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"); p == "" || looksWeak(p) {
+		return fmt.Errorf("BOOTSTRAP_ADMIN_PASSWORD must be set to a strong, non-placeholder value in production")
 	}
-	if InternalToken() == "" {
-		return fmt.Errorf("INTERNAL_SERVICE_TOKEN must be set in production")
+	if t := InternalToken(); t == "" || looksWeak(t) {
+		return fmt.Errorf("INTERNAL_SERVICE_TOKEN must be set to a strong, non-placeholder value in production")
+	}
+	// The DB password is embedded in the connection URL — reject placeholder creds.
+	for _, k := range []string{"AUTH_DATABASE_URL", "USER_DATABASE_URL", "DATABASE_URL"} {
+		if v := os.Getenv(k); v != "" && looksWeak(v) {
+			return fmt.Errorf("%s must not use a placeholder database password in production", k)
+		}
 	}
 	return nil
 }
