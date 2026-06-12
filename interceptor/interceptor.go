@@ -4,6 +4,7 @@ package interceptor
 
 import (
 	"context"
+	"os"
 	"runtime/debug"
 
 	"google.golang.org/grpc"
@@ -35,15 +36,23 @@ var exemptMethods = map[string]bool{
 }
 
 // ServiceAuth requires that callers present the shared internal token in
-// metadata. When token is empty, enforcement is disabled (local dev).
+// metadata. It is fail-closed: an empty/unset token does NOT silently disable
+// enforcement — every non-exempt call is rejected — so a misconfigured
+// deployment (whatever its APP_ENV) leaves internal RPCs locked, not wide open.
+// To intentionally run without the secret (local dev, tests) set
+// INTERNAL_AUTH_OPTIONAL=true; that opt-out must be explicit and is never the
+// default.
 func ServiceAuth(token string) grpc.UnaryServerInterceptor {
+	optional := token == "" && os.Getenv("INTERNAL_AUTH_OPTIONAL") == "true"
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if token == "" || exemptMethods[info.FullMethod] {
+		if exemptMethods[info.FullMethod] || optional {
 			return handler(ctx, req)
 		}
-		md, _ := metadata.FromIncomingContext(ctx)
-		if vals := md.Get(grpcutil.MDInternalToken); len(vals) == 1 && vals[0] == token {
-			return handler(ctx, req)
+		if token != "" {
+			md, _ := metadata.FromIncomingContext(ctx)
+			if vals := md.Get(grpcutil.MDInternalToken); len(vals) == 1 && vals[0] == token {
+				return handler(ctx, req)
+			}
 		}
 		return nil, status.Error(codes.Unauthenticated, "missing or invalid internal service token")
 	}
